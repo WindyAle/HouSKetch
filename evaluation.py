@@ -10,19 +10,21 @@ def describe_design(placed_furniture: list) -> str:
     Pygame의 가구 배치 리스트를 자연어 설명으로 변환합니다.
     """
     if not placed_furniture:
-        return "The room is completely empty."
+        return "방에 아무것도 없습니다!"
 
     item_counts = {}
     for furniture in placed_furniture:
         name = furniture['item']['name']
         item_counts[name] = item_counts.get(name, 0) + 1
         
-    description = "This design contains: "
+    description = "이 집은... "
     items = [f"{count} {name}" for name, count in item_counts.items()]
     description += ", ".join(items)
     description += "."
     
-    print(f"[Debug] Design Description: {description}")
+    print("[완성된 디자인]")
+    print(description)
+
     return description
 
 # --- 2. 유사도 계산 (로직 동일) ---
@@ -62,7 +64,7 @@ def evaluate_design(model_manager, request_embedding: list, placed_furniture: li
     Returns:
         dict: 점수와 디자인 설명을 포함한 결과
     """
-    print("\n--- [ EVALUATION START ] ---")
+    print("\n--- [ 고객 평가 ] ---")
     
     # 1. 현재 디자인(B)을 자연어로 변환
     design_desc = describe_design(placed_furniture)
@@ -71,7 +73,7 @@ def evaluate_design(model_manager, request_embedding: list, placed_furniture: li
     design_embedding = model_manager.get_embedding(design_desc)
     
     if not design_embedding:
-        print("Failed to get design embedding.")
+        print("🚨 임베딩 실패 (design_embedding)")
         return {"score": 0.0, "description": "Evaluation failed."}
 
     # 3. 점수 계산
@@ -82,6 +84,5 @@ def evaluate_design(model_manager, request_embedding: list, placed_furniture: li
         "description": design_desc
     }
     
-    print(f"Score (5.0): {score:.1f}")
-    print("--- [ EVALUATION END ] ---\n")
+    print(f"제 점수는요... {score:.1f} / 5.0")
     return result

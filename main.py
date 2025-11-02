@@ -22,7 +22,7 @@ pygame.display.set_caption("Step 1: 2D 인테리어 샌드박스")
 
 # --- ModelManager 및 평가 변수 초기화 ---
 model_manager = None
-current_request_text = "A cozy living room with a sofa and a table."
+current_request_text = "소파와 테이블이 있는 아늑한 거실이면 좋겠어요."
 request_embedding = []
 evaluation_result = None
 
@@ -33,10 +33,10 @@ try:
         running = False
     else:
         # 고객 의뢰서(A)를 벡터로 변환 (ModelManager 사용)
-        print(f"Generating embedding for Request(A): {current_request_text}")
+        print(f"고객 의뢰서: {current_request_text}")
         request_embedding = model_manager.get_embedding(current_request_text)
         if not request_embedding:
-            print("의뢰서 임베딩 생성 실패!")
+            print("🚨 의뢰서 임베딩 생성 실패")
             running = False
 except Exception as e:
     print(f"Failed to initialize ModelManager: {e}")

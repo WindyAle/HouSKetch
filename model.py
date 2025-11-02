@@ -9,9 +9,9 @@ class ModelManager:
     연결 확인, 모델(EEVE, Chat) 준비, 임베딩 생성을 담당합니다.
     """
     def __init__(self, embedding_model='EEVE', chat_model='llama3'):
-        print("Initializing ModelManager...")
+        print("=== 모델 초기화 중... ===")
         self.embedding_model = embedding_model
-        self.chat_model = chat_model # Step 3 (피드백)에서 사용
+        self.chat_model = chat_model
         self.is_ready = False
         self._initialize_ollama()
 
@@ -22,28 +22,30 @@ class ModelManager:
         """
         try:
             ollama.list()
-            print("Ollama connection successful.")
+            print("🦙 Ollama 연결 완료\n")
             
             # 필요한 모델 목록
             required_models_name = [self.embedding_model, self.chat_model]
+
+            # 실제로 받아온 모델 목록 (위와 비교)
             model_list = ollama.list()['models']
             available_models = [model['model'] for model in model_list]
 
             for model_name in required_models_name:
                 # 모델 이름에 특수문자를 포함할 수 있으므로 startswith로 검사
                 if not any(m.startswith(model_name) for m in available_models):
-                    print(f"Model '{model_name}' not found. Pulling model...")
+                    print(f"🚨 모델 '{model_name}' 없음. Pull하는 중...")
                     ollama.pull(model_name)
-                    print(f"Model '{model_name}' pulled successfully.")
+                    print(f"✅ 모델 '{model_name}' Pull 완료")
                 else:
-                    print(f"Model '{model_name}' is available.")
+                    print(f"✅ 모델 '{model_name}' 준비 완료")
+            print()
             
             self.is_ready = True
             self.embedding_model = model_list[0]['model']
 
         except Exception as e:
-            print(f"Ollama connection failed. Is 'ollama serve' running?")
-            print(f"Error: {e}", file=sys.stderr)
+            print(f"Error: {e}\n", file=sys.stderr)
             self.is_ready = False
 
     def get_embedding(self, text: str) -> list[float]:
@@ -57,7 +59,7 @@ class ModelManager:
             response = ollama.embeddings(model=self.embedding_model, prompt=text)
             return response['embedding']
         except Exception as e:
-            print(f"Error getting embedding: {e}", file=sys.stderr)
+            print(f"Error from 'get_embedding()': {e}", file=sys.stderr)
             return []
             
     # Step 3에서 상세 피드백을 생성하기 위해 미리 만들어 둡니다.
@@ -66,7 +68,7 @@ class ModelManager:
         채팅 모델을 사용해 자연어 응답을 생성합니다.
         """
         if not self.is_ready:
-            return "Model is not ready."
+            return "🚨 모델이 준비되지 않음"
             
         try:
             messages = [
