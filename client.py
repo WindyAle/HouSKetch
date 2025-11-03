@@ -9,7 +9,7 @@ def generate_request(model_manager: ModelManager) -> str:
     ModelManager의 채팅 모델을 사용해
     독특하고 창의적인 고객 의뢰서를 생성합니다.
     """
-    print("고객 의뢰서 생성 중...")
+    print("고객 요구사항 생성 중...\n")
     
     # AI에게 '고객' 역할을 부여하는 시스템 프롬프트
     system_prompt = (
@@ -23,16 +23,20 @@ def generate_request(model_manager: ModelManager) -> str:
     # 간단한 사용자 프롬프트
     user_prompt = "저만을 위한 새롭고 독특한 집을 만들어주세요."
     
-    try:
-        request_text = model_manager.get_chat_response(system_prompt, user_prompt)
-        # LLM이 생성한 텍스트에 포함될 수 있는 따옴표 제거
-        request_text = request_text.strip().replace('"', '')
+    # --- 테스트를 위한 주석
+    # try:
+    #     request_text = model_manager.get_chat_response(system_prompt, user_prompt)
+    #     # LLM이 생성한 텍스트에 포함될 수 있는 따옴표 제거
+    #     request_text = request_text.strip().replace('"', '')
         
-        print(f"New Request: {request_text}")
-        return request_text
-    except Exception as e:
-        print(f"Error generating request: {e}")
-        return "Default Request: A simple room with a bed and a table."
+    #     print(f"New Request: {request_text}")
+    #     return request_text
+    # except Exception as e:
+    #     print(f"Error generating request: {e}")
+    #     return "Default Request: A simple room with a bed and a table."
+    request_text = "저는 아늑한 스타일의 거실을 원해요. 반드시 소파 1개와 테이블 1개가 있어야 합니다."
+    
+    return request_text
 
 # --- 2. 상세 피드백 생성 ---
 
@@ -61,13 +65,25 @@ def generate_feedback(model_manager: ModelManager, request: str, design_descript
         "이것을 참고하여 고객으로서 디자이너에게 피드백을 작성하세요."
     )
     
-    try:
-        feedback_text = model_manager.get_chat_response(system_prompt, user_prompt)
-        feedback_text = feedback_text.strip().replace('"', '')
+    # --- 테스트를 위한 주석 ---
+    # try:
+    #     feedback_text = model_manager.get_chat_response(system_prompt, user_prompt)
+    #     feedback_text = feedback_text.strip().replace('"', '')
         
-        print("[ 피드백 ]")
-        print(feedback_text)
-        return feedback_text
-    except Exception as e:
-        print(f"Error 'generate_feedback()': {e}")
-        return "No comment"
+    #     print("[ 피드백 ]")
+    #     print(feedback_text)
+    #     return feedback_text
+    # except Exception as e:
+    #     print(f"Error 'generate_feedback()': {e}")
+    #     return "No comment"
+
+    if score >= 4.0:
+        feedback_text = f"와, {score:.1f}점입니다! 제가 원하던 바로 그 느낌이에요. 완벽합니다!"
+    elif score >= 2.0:
+        feedback_text = f"{score:.1f}점이네요. 음, 나쁘진 않지만... 제가 원한 것과는 조금 다르네요."
+    else:
+        feedback_text = f"{score:.1f}점이라니... 이건 완전히 잘못됐어요. 다시 해주세요."
+        
+    print("[ 피드백 ]")
+    print(feedback_text)
+    return feedback_text

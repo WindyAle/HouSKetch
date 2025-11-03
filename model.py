@@ -9,7 +9,7 @@ class ModelManager:
     Ollama 서버와의 모든 통신을 관리하는 클래스입니다.
     연결 확인, 모델(EEVE, Chat) 준비, 임베딩 생성을 담당합니다.
     """
-    def __init__(self, embedding_model='eeve-korean', chat_model='llama3'):
+    def __init__(self, embedding_model='eeve_q40', chat_model='llama3'):
         print("=== 모델 초기화 중... ===")
         self.embedding_model = embedding_model
         self.chat_model = chat_model

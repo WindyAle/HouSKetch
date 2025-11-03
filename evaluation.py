@@ -1,7 +1,6 @@
 # evaluation.py (Refactored)
 
 import numpy as np
-# 'ollama' 임포트가 제거되었습니다.
 
 # --- 1. 디자인 설명서 생성 (로직 동일) ---
 
