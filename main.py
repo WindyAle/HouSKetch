@@ -5,11 +5,11 @@ import evaluation
 import client
 from model import ModelManager
 
-# furintures 모듈을 임포트 (리스트는 아래에서 가져옴)
-import furintures 
+# furintures 모듈을 임포트 (리스트는 pygame.init() 후에 로드해야 함)
+import furnitures 
 
 # ========= 상수 정의 =========
-GRID_SIZE = 60  # 각 격자 크기
+GRID_SIZE = 72  # 각 격자 크기
 ROOM_WIDTH_GRID = 10  # 가로 칸 수
 ROOM_HEIGHT_GRID = 8 # 세로 칸 수
 
@@ -21,10 +21,10 @@ SCREEN_WIDTH = GAME_AREA_WIDTH + UI_MARGIN
 SCREEN_HEIGHT = ROOM_HEIGHT_GRID * GRID_SIZE
 
 # 폰트 설정
-FONT_PATH = "font/NanumGothic-Regular.ttf"
+FONT_PATH = "font/Ldfcomicsans.ttf"
 
 # 배경이미지 경로
-BACKGROUND_IMAGE_PATH = "assets/wood_floor.png" 
+BACKGROUND_IMAGE_PATH = "assets/wood_floor.png"
 
 # ========= pygame 초기화 =========
 pygame.init()
@@ -38,7 +38,7 @@ font_M = pygame.font.Font(FONT_PATH, 18) # 중간
 font_S = pygame.font.Font(FONT_PATH, 14) # 작은
 
 # --- 가구 리스트 로드 ---
-FURNITURE_LIST = furintures.load_furniture_data(GRID_SIZE)
+FURNITURE_LIST = furnitures.load_furniture_data(GRID_SIZE)
 if not FURNITURE_LIST:
     print("가구 리스트 로드 실패. assets 폴더를 확인하세요.")
     pygame.quit()
@@ -46,20 +46,14 @@ if not FURNITURE_LIST:
 
 # --- 배경 이미지 로드 ---
 global_background_image = None
-try:
-    background_image = pygame.image.load(BACKGROUND_IMAGE_PATH).convert()
-    global_background_image = pygame.transform.scale(background_image, (GAME_AREA_WIDTH, SCREEN_HEIGHT))
-    print(f"'{BACKGROUND_IMAGE_PATH}' 배경 이미지 로드 성공.")
-except FileNotFoundError:
-    print(f"배경 이미지를 찾을 수 없습니다: {BACKGROUND_IMAGE_PATH}. 기본 배경으로 실행합니다.")
-except Exception as e:
-    print(f"배경 이미지 로드 오류: {e}")
+background_image = pygame.image.load(BACKGROUND_IMAGE_PATH).convert()
+global_background_image = pygame.transform.scale(background_image, (GAME_AREA_WIDTH, SCREEN_HEIGHT))
 
 # --- ModelManager 및 평가 변수 초기화 ---
 # (하드코딩 테스트용)
-model_manager = None
+model_manager = ModelManager()
 current_request_text = client.generate_request(None) # 하드코딩된 의뢰서
-request_embedding = [0.1] * 128 # 임시 값
+request_embedding = [] # 임시 값 (E 키를 누를 때마다 갱신)
 evaluation_result = None
 running = True
 
@@ -243,27 +237,66 @@ while running:
     for y in range(ROOM_HEIGHT_GRID + 1):
         pygame.draw.line(screen, (210, 140, 180), (0, y * GRID_SIZE), (GAME_AREA_WIDTH, y * GRID_SIZE))
 
-    # 2. 배치된 가구 그리기 (이미지 사용)
-    for furniture in placed_furniture:
+    # # 2. 배치된 가구 그리기 (이미지 사용)
+    # for furniture in placed_furniture:
+    #     item = furniture["item"]
+    #     pos_x, pos_y = furniture["grid_pos"]
+    #     rotation = furniture["rotation"]
+        
+    #     image_to_draw = get_rotated_image(item, rotation)
+    #     screen.blit(image_to_draw, (pos_x * GRID_SIZE, pos_y * GRID_SIZE))
+
+    # # 3. 현재 선택된 가구 (고스트) 그리기 (이미지 틴트 사용)
+    # if mouse_pos[0] < GAME_AREA_WIDTH: # 게임 영역 안에서만
+        
+    #     image_to_draw = get_rotated_image(current_item, selected_furniture_rotation)
+    #     tint_color = (0, 255, 0, 100) if is_placeable else (255, 0, 0, 100)
+        
+    #     ghost_image = image_to_draw.copy()
+    #     tint_surface = pygame.Surface(ghost_image.get_size(), pygame.SRCALPHA)
+    #     tint_surface.fill(tint_color)
+    #     ghost_image.blit(tint_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        
+    #     screen.blit(ghost_image, (mouse_grid_x * GRID_SIZE, mouse_grid_y * GRID_SIZE))
+
+    # --- Z-Sorting 수정 ---
+    # 2. 렌더링할 모든 객체를 하나의 리스트로 통합
+    render_list = placed_furniture.copy()
+
+    # 3. 고스트(미리보기) 가구를 렌더링 리스트에 추가
+    if mouse_pos[0] < GAME_AREA_WIDTH: # 게임 영역 안에서만
+        render_list.append({
+            "item": current_item,
+            "grid_pos": (mouse_grid_x, mouse_grid_y),
+            "rotation": selected_furniture_rotation,
+            "is_ghost": True # 고스트 식별용 플래그
+        })
+        
+    # 4. Z-Sorting (Y좌표 오름차순, Y가 같으면 X좌표 오름차순)
+    # Y가 작은(화면 위쪽) 객체부터 그립니다.
+    sorted_render_list = sorted(render_list, key=lambda f: (f['grid_pos'][1], f['grid_pos'][0]))
+
+    # 5. 정렬된 리스트를 순회하며 그리기
+    for furniture in sorted_render_list:
         item = furniture["item"]
         pos_x, pos_y = furniture["grid_pos"]
         rotation = furniture["rotation"]
         
         image_to_draw = get_rotated_image(item, rotation)
-        screen.blit(image_to_draw, (pos_x * GRID_SIZE, pos_y * GRID_SIZE))
-
-    # 3. 현재 선택된 가구 (고스트) 그리기 (이미지 틴트 사용)
-    if mouse_pos[0] < GAME_AREA_WIDTH: # 게임 영역 안에서만
         
-        image_to_draw = get_rotated_image(current_item, selected_furniture_rotation)
-        tint_color = (0, 255, 0, 100) if is_placeable else (255, 0, 0, 100)
-        
-        ghost_image = image_to_draw.copy()
-        tint_surface = pygame.Surface(ghost_image.get_size(), pygame.SRCALPHA)
-        tint_surface.fill(tint_color)
-        ghost_image.blit(tint_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-        
-        screen.blit(ghost_image, (mouse_grid_x * GRID_SIZE, mouse_grid_y * GRID_SIZE))
+        if furniture.get("is_ghost", False):
+            # 고스트(미리보기)인 경우
+            tint_color = (0, 255, 0, 100) if is_placeable else (255, 0, 0, 100)
+            
+            ghost_image = image_to_draw.copy()
+            tint_surface = pygame.Surface(ghost_image.get_size(), pygame.SRCALPHA)
+            tint_surface.fill(tint_color)
+            ghost_image.blit(tint_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+            
+            screen.blit(ghost_image, (pos_x * GRID_SIZE, pos_y * GRID_SIZE))
+        else:
+            # 배치된 실제 가구인 경우
+            screen.blit(image_to_draw, (pos_x * GRID_SIZE, pos_y * GRID_SIZE))
 
 
     # --- 4. UI 영역 그리기 (3. 레이아웃 적용) ---
@@ -318,7 +351,7 @@ while running:
     ui_y_offset = UI_PANEL_REQUEST_Y
     pygame.draw.line(screen, (200,200,200), (GAME_AREA_WIDTH + 5, ui_y_offset - 10), (SCREEN_WIDTH - 5, ui_y_offset - 10), 1)
     
-    screen.blit(font_L.render("고객 의뢰서:", True, (0,0,0)), (GAME_AREA_WIDTH + 10, ui_y_offset))
+    screen.blit(font_M.render("고객 의뢰서:", True, (0,0,0)), (GAME_AREA_WIDTH + 10, ui_y_offset))
     ui_y_offset = draw_text_multiline(
         screen, 
         current_request_text, 
@@ -332,10 +365,10 @@ while running:
     if evaluation_result:
         ui_y_offset += 20
         score_str = f"Score: {evaluation_result['score']:.1f} / 5.0"
-        screen.blit(font_L.render(score_str, True, (0, 100, 0)), (GAME_AREA_WIDTH + 10, ui_y_offset))
+        screen.blit(font_M.render(score_str, True, (0, 100, 0)), (GAME_AREA_WIDTH + 10, ui_y_offset))
         
         feedback_y = ui_y_offset + 40
-        screen.blit(font_L.render("고객 피드백:", True, (0,0,0)), (GAME_AREA_WIDTH + 10, feedback_y))
+        screen.blit(font_M.render("고객 피드백:", True, (0,0,0)), (GAME_AREA_WIDTH + 10, feedback_y))
         draw_text_multiline(
             screen,
             evaluation_result['feedback'],

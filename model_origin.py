@@ -1,45 +1,18 @@
+import ollama
 from ollama import Client
 import sys
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-POD_ID = os.getenv("POD_ID")
-
-# 이곳에 RunPod에서 제공하는 Ollama 엔드포인트 URL을 입력하세요.
-# 예: "https://your-pod-id.runpod.net:11434"
-# (RunPod에서 11434 포트를 HTTP로 노출해야 합니다)
-RUNPOD_HOST_URL = f"https://{POD_ID}-11434.proxy.runpod.net"
 
 class ModelManager:
     """
     Ollama 서버와의 모든 통신을 관리하는 클래스입니다.
     연결 확인, 모델(EEVE, Chat) 준비, 임베딩 생성을 담당합니다.
     """
-    def __init__(self, embedding_model='EEVE-Korean-10.8B', chat_model='llama3'):
+    def __init__(self, embedding_model='eeve', chat_model='llama3'):
         print("=== 모델 초기화 중... ===")
         self.embedding_model = embedding_model
         self.chat_model = chat_model
         self.is_ready = False
-
-        # --- (수정) RunPod에 연결하는 Client 생성 ---
-        try:
-            if "YOUR_RUNPOD_ENDPOINT_URL_HERE" in RUNPOD_HOST_URL:
-                print(f"🚨 경고: model.py의 'RUNPOD_HOST_URL'을(를) RunPod 엔드포인트로 수정하세요.")
-                # 로컬 호스트로 폴백
-                self.client = Client(host='http://localhost:11434')
-                print(" > 로컬 호스트(localhost:11434)로 연결을 시도합니다...")
-            else:
-                # 지정된 RunPod URL로 Client 생성
-                self.client = Client(host=RUNPOD_HOST_URL)
-                print(f" > RunPod({RUNPOD_HOST_URL})에 연결합니다...")
-            
-            self._initialize_ollama()
-
-        except Exception as e:
-            print(f"🚨 Client 생성 실패: {e}", file=sys.stderr)
-            print(" > RunPod URL이 정확한지, Ollama가 해당 포트에서 실행 중인지 확인하세요.")
-            self.is_ready = False
+        self._initialize_ollama()
 
     def _initialize_ollama(self):
         """
@@ -47,21 +20,21 @@ class ModelManager:
         없으면 모델을 pull 합니다.
         """
         try:
-            self.client.list()
+            ollama.list()
             print("🦙 Ollama 연결 완료\n")
             
             # 필요한 모델 목록
             required_models_name = [self.embedding_model, self.chat_model]
 
             # 실제로 받아온 모델 목록 (위와 비교)
-            model_list = self.client.list()['models']
+            model_list = ollama.list()['models']
             available_models = [model['model'] for model in model_list]
 
             for model_name in required_models_name:
                 # 모델 이름에 특수문자를 포함할 수 있으므로 startswith로 검사
                 if not any(m.startswith(model_name) for m in available_models):
                     print(f"🚨 모델 '{model_name}' 없음. Pull하는 중...")
-                    self.client.pull(model_name)
+                    ollama.pull(model_name)
                     print(f"✅ 모델 '{model_name}' Pull 완료")
                 else:
                     print(f"✅ 모델 '{model_name}' 준비 완료")
@@ -81,7 +54,7 @@ class ModelManager:
             return []
             
         try:
-            response = self.client.embeddings(model=self.embedding_model, prompt=text)
+            response = ollama.embeddings(model=self.embedding_model, prompt=text)
             return response['embedding']
         except Exception as e:
             print(f"Error from 'get_embedding()': {e}", file=sys.stderr)
@@ -103,11 +76,11 @@ class ModelManager:
             ]
             options = {
                 "temperature": 1.0,
-                "num_ctx": 2048,
+                "num_ctx": 10,
                 "top_p": 1
             }
 
-            response = self.client.chat(
+            response = ollama.chat(
                 model=self.chat_model, 
                 messages=messages,
                 options=options

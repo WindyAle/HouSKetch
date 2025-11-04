@@ -75,7 +75,7 @@ def load_furniture_data(grid_size):
             "color": (30, 100, 30)
         },    
         {
-            "name": "컴퓨터 책상",
+            "name": "컴퓨터",
             "size": (2, 2),
             "image_path": "assets/desk.png",
             "image": load_scaled_image("assets/desk.png", (2, 2), grid_size),

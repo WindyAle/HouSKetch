@@ -23,20 +23,17 @@ def generate_request(model_manager: ModelManager) -> str:
     # 간단한 사용자 프롬프트
     user_prompt = "저만을 위한 새롭고 독특한 집을 만들어주세요."
     
-    # --- 테스트를 위한 주석
-    # try:
-    #     request_text = model_manager.get_chat_response(system_prompt, user_prompt)
-    #     # LLM이 생성한 텍스트에 포함될 수 있는 따옴표 제거
-    #     request_text = request_text.strip().replace('"', '')
+    try:
+        request_text = model_manager.get_chat_response(system_prompt, user_prompt)
+        # LLM이 생성한 텍스트에 포함될 수 있는 따옴표 제거
+        request_text = request_text.strip().replace('"', '')
         
-    #     print(f"New Request: {request_text}")
-    #     return request_text
-    # except Exception as e:
-    #     print(f"Error generating request: {e}")
-    #     return "Default Request: A simple room with a bed and a table."
-    request_text = "저는 아늑한 스타일의 거실을 원해요. 반드시 소파 1개와 테이블 1개가 있어야 합니다."
-    
-    return request_text
+        print(f"새로운 요구사항: {request_text}")
+        return request_text
+    except:
+        request_text = "저는 아늑한 스타일의 거실을 원해요. 반드시 소파 1개와 테이블 1개가 있어야 합니다."
+        print(f"테스트 의뢰서: {request_text}")
+        return request_text
 
 # --- 2. 상세 피드백 생성 ---
 
@@ -65,25 +62,26 @@ def generate_feedback(model_manager: ModelManager, request: str, design_descript
         "이것을 참고하여 고객으로서 디자이너에게 피드백을 작성하세요."
     )
     
-    # --- 테스트를 위한 주석 ---
-    # try:
-    #     feedback_text = model_manager.get_chat_response(system_prompt, user_prompt)
-    #     feedback_text = feedback_text.strip().replace('"', '')
-        
-    #     print("[ 피드백 ]")
-    #     print(feedback_text)
-    #     return feedback_text
-    # except Exception as e:
-    #     print(f"Error 'generate_feedback()': {e}")
-    #     return "No comment"
+    try:
+        if model_manager is None or not model_manager.is_ready:
+            raise Exception("테스트 모드") # 모델 매니저가 없으면 하드코딩으로
 
-    if score >= 4.0:
-        feedback_text = f"와, {score:.1f}점입니다! 제가 원하던 바로 그 느낌이에요. 완벽합니다!"
-    elif score >= 2.0:
-        feedback_text = f"{score:.1f}점이네요. 음, 나쁘진 않지만... 제가 원한 것과는 조금 다르네요."
-    else:
-        feedback_text = f"{score:.1f}점이라니... 이건 완전히 잘못됐어요. 다시 해주세요."
+        feedback_text = model_manager.get_chat_response(system_prompt, user_prompt)
+        feedback_text = feedback_text.strip().replace('"', '')
         
-    print("[ 피드백 ]")
-    print(feedback_text)
-    return feedback_text
+        print("[ 피드백 ]")
+        print(feedback_text)
+        return feedback_text
+    except Exception as e:
+        # print(f"Error 'generate_feedback()': {e}") # 테스트 모드에서는 에러 아님
+        # (수정) 하드코딩된 테스트 값을 except 블록으로 이동
+        if score >= 4.0:
+            feedback_text = f"와, {score:.1f}점입니다! 제가 원하던 바로 그 느낌이에요. 완벽합니다!"
+        elif score >= 2.0:
+            feedback_text = f"{score:.1f}점이네요. 음, 나쁘진 않지만... 제가 원한 것과는 조금 다르네요."
+        else:
+            feedback_text = f"{score:.1f}점이라니... 이건 완전히 잘못됐어요. 다시 해주세요."
+            
+        print("[ 피드백 ]")
+        print(feedback_text)
+        return feedback_text

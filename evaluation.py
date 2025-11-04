@@ -1,6 +1,25 @@
 # evaluation.py (Refactored)
 
 import numpy as np
+import random
+
+# 테스트를 위한 무작위 벡터 생성
+def random_unit_vector(N):
+    v = np.random.normal(size=N)
+    return v / np.linalg.norm(v)
+
+
+def make_pair_with_cos(N=4096, cos_target=0):
+    cos_target = np.random.uniform(-10, 10)
+    # a: 임의의 단위벡터
+    a = random_unit_vector(N)
+    # a에 수직인 단위벡터 u 만들기
+    x = np.random.normal(size=N)
+    x -= x.dot(a) * a               # a에 투영 성분 제거 -> orthogonal
+    u = x / np.linalg.norm(x)
+    # b 구성: cos_target * a + sqrt(1-cos^2) * u  --> 단위벡터
+    b = cos_target * a + np.sqrt(max(0.0, 1 - cos_target**2)) * u
+    return a, b
 
 # --- 1. 디자인 설명서 생성 (로직 동일) ---
 
@@ -32,21 +51,14 @@ def calculate_similarity_score(vec_a: list[float], vec_b: list[float]) -> float:
     """
     두 벡터(A:요구사항, B:디자인)의 코사인 유사도를 계산하여 0~5점 척도로 반환합니다.
     """
-    if not vec_a or not vec_b:
-        return 0.0
 
     vec_a_np = np.array(vec_a)
     vec_b_np = np.array(vec_b)
+
+    cosine_similarity = np.dot(vec_a_np, vec_b_np) / (np.linalg.norm(vec_a) * np.linalg.norm(vec_b))
+    print(cosine_similarity)
     
-    # 0으로 나누기 방지
-    norm_a = np.linalg.norm(vec_a_np)
-    norm_b = np.linalg.norm(vec_b_np)
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-        
-    cosine_similarity = np.dot(vec_a_np, vec_b_np) / (norm_a * norm_b)
-    
-    score = (cosine_similarity + 1) / 2 * 5.0
+    score = ((cosine_similarity + 1) / 2) * 5.0
     return score
 
 # --- 3. 평가 실행 (NEW: ModelManager를 인자로 받음) ---
@@ -69,13 +81,16 @@ def evaluate_design(model_manager, request_embedding: list, placed_furniture: li
     design_desc = describe_design(placed_furniture)
     
     # 2. 디자인(B)을 EEVE 벡터로 변환 (ModelManager 사용)
-    design_embedding = model_manager.get_embedding(design_desc)
+    # 테스트를 위한 주석
+    # design_embedding = model_manager.get_embedding(design_desc)
     
-    if not design_embedding:
-        print("🚨 임베딩 실패 (design_embedding)")
-        return {"score": 0.0, "description": "Evaluation failed."}
+    # if not design_embedding:
+    #     print("🚨 임베딩 실패 (design_embedding)")
+    #     return {"score": 0.0, "description": "Evaluation failed."}
 
     # 3. 점수 계산
+    # 테스트를 위한 랜덤 생성
+    request_embedding, design_embedding = make_pair_with_cos()
     score = calculate_similarity_score(request_embedding, design_embedding)
     
     result = {
