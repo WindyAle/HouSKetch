@@ -6,9 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 POD_ID = os.getenv("POD_ID")
 
-# 이곳에 RunPod에서 제공하는 Ollama 엔드포인트 URL을 입력하세요.
-# 예: "https://your-pod-id.runpod.net:11434"
-# (RunPod에서 11434 포트를 HTTP로 노출해야 합니다)
+# RunPod에서 제공하는 Ollama 엔드포인트
 RUNPOD_HOST_URL = f"https://{POD_ID}-11434.proxy.runpod.net"
 
 class ModelManager:
@@ -24,21 +22,15 @@ class ModelManager:
 
         # --- (수정) RunPod에 연결하는 Client 생성 ---
         try:
-            if "YOUR_RUNPOD_ENDPOINT_URL_HERE" in RUNPOD_HOST_URL:
-                print(f"🚨 경고: model.py의 'RUNPOD_HOST_URL'을(를) RunPod 엔드포인트로 수정하세요.")
-                # 로컬 호스트로 폴백
-                self.client = Client(host='http://localhost:11434')
-                print(" > 로컬 호스트(localhost:11434)로 연결을 시도합니다...")
-            else:
-                # 지정된 RunPod URL로 Client 생성
-                self.client = Client(host=RUNPOD_HOST_URL)
-                print(f" > RunPod({RUNPOD_HOST_URL})에 연결합니다...")
-            
+            # 지정된 RunPod URL로 Client 생성
+            self.client = Client(host=RUNPOD_HOST_URL)
+            print(f"RunPod에 연결합니다...")
+        
             self._initialize_ollama()
 
         except Exception as e:
             print(f"🚨 Client 생성 실패: {e}", file=sys.stderr)
-            print(" > RunPod URL이 정확한지, Ollama가 해당 포트에서 실행 중인지 확인하세요.")
+            print("RunPod URL이 정확한지, Ollama가 해당 포트에서 실행 중인지 확인하세요.")
             self.is_ready = False
 
     def _initialize_ollama(self):
@@ -105,6 +97,7 @@ class ModelManager:
                 "temperature": 1.0,
                 "num_ctx": 2048,
                 "top_p": 1
+                # "num_predict": 20
             }
 
             response = self.client.chat(
