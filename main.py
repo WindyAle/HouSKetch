@@ -28,6 +28,7 @@ SCREEN_HEIGHT = GAME_AREA_HEIGHT + BOTTOM_UI_MARGIN # 650
 
 # 폰트 설정
 FONT_PATH = "font/NanumGothic-Regular.ttf"
+PENCIL_FONT_PATH = "font/MaplestoryLight.ttf" # 손글씨 폰트
 
 # 배경이미지 경로
 BACKGROUND_IMAGE_PATH = "assets/wood_floor.png" 
@@ -38,12 +39,15 @@ clock = pygame.time.Clock() # FPS를 위한 시계
 
 # --- 화면 및 폰트 로드 ---
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("Welcome To My - v0.3 (New Layout)")
+pygame.display.set_caption("HouSKetch - v0.4 (UI Revised)")
 
 font_XL = pygame.font.Font(FONT_PATH, 48) # 큰
 font_L = pygame.font.Font(FONT_PATH, 22) # 큰
 font_M = pygame.font.Font(FONT_PATH, 18) # 중간
 font_S = pygame.font.Font(FONT_PATH, 14) # 작은
+
+# 손글씨 폰트
+font_Pencil_M = pygame.font.Font(PENCIL_FONT_PATH, 16)
 
 DOOR_COLOR = (101, 67, 33) # 문 색: 짙은 갈색
 
@@ -175,7 +179,7 @@ def load_game_resources(results_dict, completion_event, progress_tracker):
         if 'background_image' not in results_dict:
              results_dict['background_image'] = None # 배경 로드 실패
         results_dict['model_manager'] = None
-        persona, request_text = client.generate_request(None)
+        persona, wishlist, request_text = client.generate_request(None)
         results_dict['current_persona'] = persona
         results_dict['request_text'] = request_text
         results_dict['request_embedding'] = [0.1] * 128
@@ -264,39 +268,51 @@ current_request_text = loaded_resources.get('request_text')
 request_embedding = loaded_resources.get('request_embedding')
 door_position = None # 문 위치 변수
 
+# ========= 별점 및 종이 이미지 =========
+try:
+    # 포스트잇 (페르소나 + 의뢰서)
+    post_it_img = pygame.image.load("assets/post.png").convert_alpha()
+    post_it_img = pygame.transform.scale(post_it_img, (RIGHT_UI_MARGIN - 20, 300))
+except Exception as e:
+    print(f"UI 에셋 로드 실패 (post.png): {e}")
+    post_it_img = None
+
+try:
+    # 2. 종이 (의뢰서/피드백)
+    paper_img = pygame.image.load("assets/paper.png").convert_alpha()
+    paper_img = pygame.transform.scale(paper_img, (RIGHT_UI_MARGIN - 20, 180)) # (너비 280, 높이 180)
+except Exception as e:
+    print(f"UI 에셋 로드 실패 (paper.png): {e}")
+    paper_img = None
+
+# 3. 별점 이미지
+star_full_img = None
+star_half_img = None
+star_empty_img = None
+try:
+    STAR_SIZE = (28, 28) # 별 크기
+    star_full_img = pygame.image.load("assets/star.png").convert_alpha()
+    star_full_img = pygame.transform.scale(star_full_img, STAR_SIZE)
+    
+    # (신규) 반쪽 별 동적 생성
+    star_half_img = pygame.image.load("assets/star_half.png").convert_alpha()
+    star_half_img = pygame.transform.scale(star_half_img, STAR_SIZE)
+
+    # (신규) 빈 별 로드
+    star_empty_img = pygame.image.load("assets/star_empty.png").convert_alpha()
+    star_empty_img = pygame.transform.scale(star_empty_img, STAR_SIZE)
+    
+except Exception as e:
+    print(f"UI 에셋 로드 실패 (star.png / star_empty.png): {e}. 텍스트 점수로 대체합니다.")
+    # 하나라도 실패하면 모두 None으로 설정
+    star_full_img = star_half_img = star_empty_img = None
+
 print(current_request_text)
 
 if not FURNITURE_LIST:
     print("가구 리스트 로드 실패. assets 폴더를 확인하세요.")
     pygame.quit()
     sys.exit()
-
-# # --- 배경 이미지 로드 ---
-# global_background_image = None
-# background_image = pygame.image.load(BACKGROUND_IMAGE_PATH).convert()
-# # 게임 영역 크기에 맞게 스케일
-# global_background_image = pygame.transform.scale(background_image, (GAME_AREA_WIDTH, GAME_AREA_HEIGHT))
-
-# # --- ModelManager 및 평가 변수 초기화 ---
-# model_manager = None
-# current_request_text = ""
-# request_embedding = []
-
-# running = True
-
-# try:
-#     model_manager = ModelManager()
-
-#     current_request_text = client.generate_request(model_manager)
-#     print(f"요구사항: {current_request_text}")
-#     request_embedding = model_manager.get_embedding(current_request_text)
-#     if not request_embedding:
-#         print("요구사항 임베딩 실패! 스트 모드로 전환합니다.")
-#         current_request_text = client.generate_request(None)
-#         request_embedding = [0.1] * 128
-# except Exception as e:
-#     print(f"🚨 모델 초기화 실패: {e}")
-#     print("Ollama 서버가 실행 중인지 확인하세요. 테스트 모드로 실행합니다.")
 
 # --- 헬퍼 함수 (문 생성) ---
 def create_new_door():
@@ -382,6 +398,23 @@ def draw_text_multiline(surface, text, pos, font, max_width, color):
     surface.blit(font.render(line.strip(), True, color), (x, y))
     return y + font.get_linesize()
 
+# --- (신규) 별점 그리기 헬퍼 함수 ---
+def draw_star_rating(surface, score, pos, star_full, star_half, star_empty):
+    """주어진 점수에 맞춰 5개의 별을 그립니다."""
+    x, y = pos
+    star_width = star_full.get_width()
+    star_spacing = 4 # 별 사이 간격
+    
+    for i in range(5):
+        star_x = x + i * (star_width + star_spacing)
+        
+        if score >= i + 1:
+            surface.blit(star_full, (star_x, y))
+        elif score >= i + 0.5:
+            surface.blit(star_half, (star_x, y))
+        else:
+            surface.blit(star_empty, (star_x, y))
+
 # --- 평가 트리거 함수 ---
 def trigger_evaluation():
     """'E' 키 또는 '디자인 완료' 버튼 클릭 시 평가를 실행합니다."""
@@ -410,7 +443,7 @@ def trigger_evaluation():
         "feedback": feedback_text
     }
 
-# --- (신규) 게임 초기화 함수 ---
+# --- 게임 초기화 함수 ---
 def reset_game():
     """(신규) '초기화' 버튼 클릭 시 게임 상태를 리셋합니다."""
     global current_persona, current_request_text, request_embedding, placed_furniture, evaluation_result, internal_wishlist, door_position
@@ -554,7 +587,7 @@ while running:
     screen.fill((255, 255, 255)) # 기본 흰색 배경
     
     # --- 1.1 오른쪽/하단 UI 배경 그리기 ---
-    pygame.draw.rect(screen, (245, 245, 245), right_ui_rect)
+    pygame.draw.rect(screen, (250, 248, 240), right_ui_rect)
     pygame.draw.rect(screen, (240, 240, 240), bottom_ui_rect) # 하단 배경색
 
     # --- 1.2 게임 영역 그리기 (배경/그리드) ---
@@ -563,10 +596,11 @@ while running:
     else:
         pygame.draw.rect(screen, (255, 255, 255), game_area_rect) # 흰색
 
+    grid_line_color = (255, 255, 255, 50)
     for x in range(ROOM_WIDTH_GRID + 1):
-        pygame.draw.line(screen, (210, 140, 180, 100), (x * GRID_SIZE, 0), (x * GRID_SIZE, GAME_AREA_HEIGHT))
+        pygame.draw.line(screen, grid_line_color, (x * GRID_SIZE, 0), (x * GRID_SIZE, GAME_AREA_HEIGHT))
     for y in range(ROOM_HEIGHT_GRID + 1):
-        pygame.draw.line(screen, (210, 140, 180, 100), (0, y * GRID_SIZE), (GAME_AREA_WIDTH, y * GRID_SIZE))
+        pygame.draw.line(screen, grid_line_color, (0, y * GRID_SIZE), (GAME_AREA_WIDTH, y * GRID_SIZE))
 
     # --- (신규) 1.3 문 그리기 ---
     if door_position:
@@ -625,39 +659,90 @@ while running:
     screen.blit(font_S.render("L-Click: 배치 / R-Click: 제거", True, (100,100,100)), (GAME_AREA_WIDTH + 10, ui_y_offset))
     ui_y_offset += 30
 
-    # 3.2 고객 의뢰서 표시
+    # (수정) 3.2 페르소나 정보 및 고객 의뢰서 표시
     ui_y_offset += 20 
-    pygame.draw.line(screen, (200,200,200), (GAME_AREA_WIDTH + 5, ui_y_offset), (SCREEN_WIDTH - 5, ui_y_offset), 1)
-    ui_y_offset += 10
-    
-    screen.blit(font_L.render("고객 요구사항:", True, (0,0,0)), (GAME_AREA_WIDTH + 10, ui_y_offset))
-    ui_y_offset = draw_text_multiline(
-        screen, 
-        current_request_text, 
-        (GAME_AREA_WIDTH + 10, ui_y_offset + 30), 
-        font_M, 
-        RIGHT_UI_MARGIN - 20, 
-        (50,50,50)
-    )
+    pygame.draw.line(screen, (220,220,220), (GAME_AREA_WIDTH + 10, ui_y_offset), (SCREEN_WIDTH - 20, ui_y_offset), 2)
+    ui_y_offset += 15
+
+    if post_it_img:
+        post_it_rect = post_it_img.get_rect(topleft=(GAME_AREA_WIDTH + 10, ui_y_offset))
+        screen.blit(post_it_img, post_it_rect)
+        
+        # 텍스트 패딩
+        text_x = post_it_rect.x + 20
+        text_y = post_it_rect.y + 25
+        
+        # 이름 (기존 폰트, 크게)
+        persona_name_text = font_Pencil_M.render(current_persona['name'], True, (30,30,30))
+        screen.blit(persona_name_text, (text_x, text_y))
+        
+        # 정보 (기존 폰트, 작게)
+        persona_info_str = f"{current_persona['job']}" # (이름, 직업만)
+        persona_info_text = font_Pencil_M.render(persona_info_str, True, (80, 80, 80))
+        screen.blit(persona_info_text, (text_x, text_y + 20))
+
+        # --- 3.2.2 의뢰서 그리기 (포스트잇 하단) ---
+        request_y_start = text_y + 75 # 페르소나 정보 아래
+        
+        # 구분선
+        pygame.draw.line(screen, (200,200,200), 
+                         (post_it_rect.x + 15, request_y_start - 10), 
+                         (post_it_rect.right - 15, request_y_start - 10), 1)
+        
+        # '고객 의뢰서' 타이틀 (손글씨 폰트)
+        request_title = font_Pencil_M.render("고객 의뢰서:", True, (80,80,80))
+        screen.blit(request_title, (text_x, request_y_start))
+
+        # 의뢰서 본문 (손글씨 폰트)
+        ui_y_offset = draw_text_multiline(
+            screen, 
+            current_request_text, 
+            (text_x, request_y_start + 30), # 타이틀 아래
+            font_Pencil_M, # (신규) 손글씨 폰트
+            post_it_rect.width - 40, # 패딩
+            (40, 40, 40) # 손글씨 색
+        )
+        ui_y_offset = post_it_rect.bottom # Y 오프셋을 포스트잇 바닥으로
     
     # 3.3 '디자인 완료' 버튼 또는 '평가 결과' 표시
     ui_y_offset += 20 # 의뢰서와 버튼/결과 사이 여백
     
     if evaluation_result:
         # --- 평가가 완료된 경우 ---
-        score_str = f"Score: {evaluation_result['score']:.1f} / 5.0"
-        screen.blit(font_L.render(score_str, True, (0, 100, 0)), (GAME_AREA_WIDTH + 10, ui_y_offset))
-        
+# (수정) 별점 표시
+        if star_full_img and star_half_img and star_empty_img:
+            draw_star_rating(
+                screen, 
+                evaluation_result['score'], 
+                (GAME_AREA_WIDTH + 10, ui_y_offset),
+                star_full_img, star_half_img, star_empty_img
+            )
+        else:
+            # (Fallback) 별 로드 실패 시
+            score_str = f"Score: {evaluation_result['score']:.1f} / 5.0"
+            screen.blit(font_L.render(score_str, True, (0, 100, 0)), (GAME_AREA_WIDTH + 10, ui_y_offset))
+
         feedback_y = ui_y_offset + 40
         screen.blit(font_L.render("고객 피드백:", True, (0,0,0)), (GAME_AREA_WIDTH + 10, feedback_y))
-        draw_text_multiline(
-            screen,
-            evaluation_result['feedback'],
-            (GAME_AREA_WIDTH + 10, feedback_y + 30),
-            font_M,
-            RIGHT_UI_MARGIN - 20,
-            (50,50,50)
-        )
+        
+        # (수정) 피드백 (종이 + 손글씨)
+        if paper_img:
+            paper_rect_feedback = paper_img.get_rect(topleft=(GAME_AREA_WIDTH + 10, feedback_y + 30))
+            screen.blit(paper_img, paper_rect_feedback)
+            draw_text_multiline(
+                screen,
+                evaluation_result['feedback'],
+                (paper_rect_feedback.x + 25, paper_rect_feedback.y + 25), # 패딩
+                font_Pencil_M, # (신규) 손글씨 폰트
+                paper_rect_feedback.width - 50, # 패딩
+                (40, 40, 40) # 손글씨 색
+            )
+        else:
+            # (Fallback) 종이 로드 실패 시
+            draw_text_multiline(
+                screen, evaluation_result['feedback'], (GAME_AREA_WIDTH + 10, feedback_y + 30),
+                font_M, RIGHT_UI_MARGIN - 20, (50,50,50)
+            )
     else:
         # 평가 전, '디자인 완료' 버튼 표시
         evaluate_button_rect = pygame.Rect(GAME_AREA_WIDTH + 10, ui_y_offset, RIGHT_UI_MARGIN - 20, 50)
