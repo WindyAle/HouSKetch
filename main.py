@@ -452,34 +452,36 @@ def run_evaluation_thread():
     print("평가 스레드 완료")
 
 # --- 게임 초기화 함수 ---
-def reset_game():
-    """(신규) '초기화' 버튼 클릭 시 게임 상태를 리셋합니다."""
+def reset_game(eval=False):
+    """'초기화' 버튼 클릭 시 게임 상태를 리셋합니다."""
     global current_persona, current_request_text, request_embedding, placed_furniture, evaluation_result, internal_wishlist, door_position, is_evaluating, show_feedback_popup
     print("--- 게임 초기화 ---")
     
     # 1. 가구 배치 초기화
     placed_furniture = []
-    # 2. 평가 결과 초기화
-    evaluation_result = None
-    # 2-1. 팝업 및 평가 상태 초기화
-    is_evaluating = False
-    show_feedback_popup = False
 
-    # 3. 새 문 생성
-    door_position = create_new_door()
-    
-    # 4. 새 고객 생성
-    current_persona, internal_wishlist, current_request_text = client.generate_request(model_manager)
+    if eval:
+        # 2. 평가 결과 초기화
+        evaluation_result = None
+        # 2-1. 팝업 및 평가 상태 초기화
+        is_evaluating = False
+        show_feedback_popup = False
 
-    # 5. 새 임베딩 생성
-    if model_manager and model_manager.is_ready:
-        request_embedding = model_manager.get_embedding(current_request_text)
-    else:
-        request_embedding = [0.1] * 128
+        # 3. 새 문 생성
+        door_position = create_new_door()
         
-    print(f"새로운 고객: {current_persona['name']}")
-    print(f"[요구 가구]: {internal_wishlist}")
-    print(f"새로운 의뢰서: {current_request_text}")
+        # 4. 새 고객 생성
+        current_persona, internal_wishlist, current_request_text = client.generate_request(model_manager)
+
+        # 5. 새 임베딩 생성
+        if model_manager and model_manager.is_ready:
+            request_embedding = model_manager.get_embedding(current_request_text)
+        else:
+            request_embedding = [0.1] * 128
+            
+        print(f"새로운 고객: {current_persona['name']}")
+        print(f"[요구 가구]: {internal_wishlist}")
+        print(f"새로운 의뢰서: {current_request_text}")
 
 # ========= 변수 초기화 (게임 루프 전) =========
 placed_furniture = []
@@ -505,6 +507,8 @@ reset_button_rect = None    # reset 버튼
 is_evaluating = False
 show_feedback_popup = False
 popup_close_button_rect = None # 팝업 닫기 버튼
+
+eval = False # 평가 팝업창이 열려있지 않은 상태에서 reset_game 호출 시 가구 영역만 비움
 
 door_position = create_new_door() 
 
@@ -568,8 +572,9 @@ while running:
             if event.button == 1: # 좌클릭
                 # 0. 팝업이 켜져있으면 팝업 클릭만 처리
                 if show_feedback_popup:
+                    eval = True
                     if popup_close_button_rect and popup_close_button_rect.collidepoint(mouse_pos):
-                        reset_game()
+                        reset_game(eval)
                 
                 # 1. 평가 중이면 모든 클릭 무시
                 elif is_evaluating:
@@ -678,7 +683,7 @@ while running:
         else:
             # 실제 배치된 가구 그리기
             screen.blit(image_to_draw, (pos_x * GRID_SIZE, pos_y * GRID_SIZE))
-            
+
     # --- 3. 오른쪽 UI 그리기 ---
     # 3.1 도움말 패널
     ui_y_offset = 10 # 오른쪽 패널 상단 기준
@@ -759,7 +764,7 @@ while running:
             
         pygame.draw.rect(screen, button_color, evaluate_button_rect, border_radius=5)
         
-        btn_text = font_L.render("디자인 완료(E)", True, (255, 255, 255))
+        btn_text = font_L.render(" ✅ ", True, (255, 255, 255))
         btn_text_rect = btn_text.get_rect(center=evaluate_button_rect.center)
         screen.blit(btn_text, btn_text_rect)
 
@@ -774,18 +779,18 @@ while running:
         row = i % 2
         col = i // 2
         
-        # (수정) 버튼의 '논리적' X, Y 위치 (스크롤 적용 및 여백)
+        # 버튼의 '논리적' X, Y 위치 (스크롤 적용 및 여백)
         item_x_pos = (col * UI_ITEM_WIDTH) + ui_scroll_x + 10 # 10px 좌측 여백
         item_y_pos = (row * UI_ITEM_HEIGHT) + 10 # 10px 상단 여백
         
-        # (수정) 버튼 크기 (가로 145, 세로 60)
+        # 버튼 크기 (가로 145, 세로 60)
         button_rect = pygame.Rect(item_x_pos, item_y_pos, UI_ITEM_WIDTH - 10, UI_ITEM_HEIGHT - 10) # 10px, 10px 여백
         
         # 화면에 보이는 영역에만 버튼을 그림
         if item_x_pos + UI_ITEM_WIDTH > 0 and item_x_pos < SCREEN_WIDTH:
             
             # 실제 화면 좌표 기준 Rect (클릭 감지용)
-            button_rect_screen = pygame.Rect(item_x_pos, item_y_pos + GAME_AREA_HEIGHT, UI_ITEM_WIDTH - 10, UI_ITEM_HEIGHT - 10)
+            button_rect_screen = pygame.Rect(item_x_pos + 10, item_y_pos + GAME_AREA_HEIGHT, UI_ITEM_WIDTH - 10, UI_ITEM_HEIGHT - 10)
             ui_buttons.append({"index": i, "rect_screen": button_rect_screen})
             
             # 선택된 아이템은 녹색으로 하이라이트

@@ -97,7 +97,7 @@ class ModelManager:
                 "temperature": 0.7,
                 "num_ctx": 2048,
                 "top_p": 1,
-                "num_predict": 100
+                "num_predict": 1000
             }
 
             response = self.client.chat(
