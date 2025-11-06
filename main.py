@@ -47,6 +47,7 @@ font_M = pygame.font.Font(FONT_PATH, 18) # 중간
 font_S = pygame.font.Font(FONT_PATH, 14) # 작은
 
 # 손글씨 폰트
+font_Pencil_L = pygame.font.Font(PENCIL_FONT_PATH, 20)
 font_Pencil_M = pygame.font.Font(PENCIL_FONT_PATH, 16)
 
 DOOR_COLOR = (101, 67, 33) # 문 색: 짙은 갈색
@@ -268,7 +269,7 @@ current_request_text = loaded_resources.get('request_text')
 request_embedding = loaded_resources.get('request_embedding')
 door_position = None # 문 위치 변수
 
-# ========= 별점 및 종이 이미지 =========
+# ========= 별점 및 종이 이미지 애셋 로드 =========
 try:
     # 포스트잇 (페르소나 + 의뢰서)
     post_it_img = pygame.image.load("assets/post.png").convert_alpha()
@@ -276,14 +277,6 @@ try:
 except Exception as e:
     print(f"UI 에셋 로드 실패 (post.png): {e}")
     post_it_img = None
-
-try:
-    # 2. 종이 (의뢰서/피드백)
-    paper_img = pygame.image.load("assets/paper.png").convert_alpha()
-    paper_img = pygame.transform.scale(paper_img, (RIGHT_UI_MARGIN - 20, 180)) # (너비 280, 높이 180)
-except Exception as e:
-    print(f"UI 에셋 로드 실패 (paper.png): {e}")
-    paper_img = None
 
 # 3. 별점 이미지
 star_full_img = None
@@ -398,7 +391,7 @@ def draw_text_multiline(surface, text, pos, font, max_width, color):
     surface.blit(font.render(line.strip(), True, color), (x, y))
     return y + font.get_linesize()
 
-# --- (신규) 별점 그리기 헬퍼 함수 ---
+# --- 별점 그리기 헬퍼 함수 ---
 def draw_star_rating(surface, score, pos, star_full, star_half, star_empty):
     """주어진 점수에 맞춰 5개의 별을 그립니다."""
     x, y = pos
@@ -443,16 +436,34 @@ def trigger_evaluation():
         "feedback": feedback_text
     }
 
+# --- 평가 스레드 함수 ---
+def run_evaluation_thread():
+    """'trigger_evaluation'을 별도 스레드에서 실행하고 상태를 업데이트합니다."""
+    global evaluation_result, is_evaluating, show_feedback_popup
+    
+    print("평가 스레드 시작")
+    # 실제 평가 실행 (Blocking)
+    result = trigger_evaluation() 
+    
+    # 평가 완료 후 메인 스레드에서 팝업을 띄우도록 상태 변경
+    evaluation_result = result
+    is_evaluating = False
+    show_feedback_popup = True
+    print("평가 스레드 완료")
+
 # --- 게임 초기화 함수 ---
 def reset_game():
     """(신규) '초기화' 버튼 클릭 시 게임 상태를 리셋합니다."""
-    global current_persona, current_request_text, request_embedding, placed_furniture, evaluation_result, internal_wishlist, door_position
+    global current_persona, current_request_text, request_embedding, placed_furniture, evaluation_result, internal_wishlist, door_position, is_evaluating, show_feedback_popup
     print("--- 게임 초기화 ---")
     
     # 1. 가구 배치 초기화
     placed_furniture = []
     # 2. 평가 결과 초기화
     evaluation_result = None
+    # 2-1. 팝업 및 평가 상태 초기화
+    is_evaluating = False
+    show_feedback_popup = False
 
     # 3. 새 문 생성
     door_position = create_new_door()
@@ -467,6 +478,7 @@ def reset_game():
         request_embedding = [0.1] * 128
         
     print(f"새로운 고객: {current_persona['name']}")
+    print(f"[요구 가구]: {internal_wishlist}")
     print(f"새로운 의뢰서: {current_request_text}")
 
 # ========= 변수 초기화 (게임 루프 전) =========
@@ -489,6 +501,11 @@ evaluation_result = None    # 평가 결과
 evaluate_button_rect = None # 평가 버튼
 reset_button_rect = None    # reset 버튼
 
+# 평가/팝업 상태 변수
+is_evaluating = False
+show_feedback_popup = False
+popup_close_button_rect = None # 팝업 닫기 버튼
+
 door_position = create_new_door() 
 
 running = True
@@ -497,21 +514,23 @@ running = True
 while running:
     mouse_pos = pygame.mouse.get_pos()
     
-    # (수정) 마우스 좌표 변환 (게임 영역 기준)
-    mouse_grid_x = mouse_pos[0] // GRID_SIZE
-    mouse_grid_y = mouse_pos[1] // GRID_SIZE
-
-    current_item = FURNITURE_LIST[selected_furniture_index]
-
-    # (수정) is_placeable은 게임 영역 내에서만 계산
+    # (수정) 마우스 좌표 변환 (팝업/평가 중이 아닐 때만)
+    mouse_grid_x = -1
+    mouse_grid_y = -1
     is_placeable = False
-    if game_area_rect.collidepoint(mouse_pos):
-        is_placeable = not check_collision(
-            current_item, 
-            (mouse_grid_x, mouse_grid_y), 
-            selected_furniture_rotation, 
-            placed_furniture
-        )
+    
+    if not is_evaluating and not show_feedback_popup:
+        mouse_grid_x = mouse_pos[0] // GRID_SIZE
+        mouse_grid_y = mouse_pos[1] // GRID_SIZE
+        current_item = FURNITURE_LIST[selected_furniture_index]
+
+        if game_area_rect.collidepoint(mouse_pos):
+            is_placeable = not check_collision(
+                current_item, 
+                (mouse_grid_x, mouse_grid_y), 
+                selected_furniture_rotation, 
+                placed_furniture
+            )
 
     # ========= 이벤트 처리 =========
     for event in pygame.event.get():
@@ -520,17 +539,18 @@ while running:
             pygame.quit()
             sys.exit()
         
-        # --- (수정) 하단 패널 횡방향 스크롤 ---
+        # --- 하단 패널 횡방향 스크롤 ---
         if event.type == pygame.MOUSEWHEEL:
-            # 마우스가 하단 UI 영역에 있을 때만 스크롤
-            if bottom_ui_rect.collidepoint(mouse_pos):
-                ui_scroll_x += event.y * 30 # (event.y가 횡방향 스크롤을 제어)
-                
-                # 스크롤 범위 제한
-                total_list_width = math.ceil(len(FURNITURE_LIST) / 2) * UI_ITEM_WIDTH
-                max_scroll = max(0, total_list_width - SCREEN_WIDTH)
-                
-                ui_scroll_x = max(min(ui_scroll_x, 0), -max_scroll)
+            if not is_evaluating and not show_feedback_popup:
+                # 마우스가 하단 UI 영역에 있을 때만 스크롤
+                if bottom_ui_rect.collidepoint(mouse_pos):
+                    ui_scroll_x += event.y * 30 # (event.y가 횡방향 스크롤을 제어)
+                    
+                    # 스크롤 범위 제한
+                    total_list_width = math.ceil(len(FURNITURE_LIST) / 2) * UI_ITEM_WIDTH
+                    max_scroll = max(0, total_list_width - SCREEN_WIDTH)
+                    
+                    ui_scroll_x = max(min(ui_scroll_x, 0), -max_scroll)
         
         # --- 키다운 이벤트 ---
         if event.type == pygame.KEYDOWN:
@@ -538,20 +558,31 @@ while running:
                 selected_furniture_rotation = (selected_furniture_rotation + 1) % 2
             
             if event.key == pygame.K_e: # 'E' 키로 평가
-                if not evaluation_result: # 평가가 아직 안됐을 때만
-                            evaluation_result = trigger_evaluation()
+                if not evaluation_result and not is_evaluating:
+                    is_evaluating = True
+                    eval_thread = threading.Thread(target=run_evaluation_thread, daemon=True)
+                    eval_thread.start()
         
-        # 클릭 이벤트 (수정)
+        # 클릭 이벤트
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1: # 좌클릭
-                # 1. 하단 UI(가구 목록) 클릭
+                # 0. 팝업이 켜져있으면 팝업 클릭만 처리
+                if show_feedback_popup:
+                    if popup_close_button_rect and popup_close_button_rect.collidepoint(mouse_pos):
+                        reset_game()
+                
+                # 1. 평가 중이면 모든 클릭 무시
+                elif is_evaluating:
+                    pass # 평가 중 클릭 방지
+
+                # 2. 하단 UI(가구 목록) 클릭
                 if bottom_ui_rect.collidepoint(mouse_pos):
                     for button in ui_buttons:
                         if button["rect_screen"].collidepoint(mouse_pos):
                             selected_furniture_index = button["index"]
                             selected_furniture_rotation = 0
                             break
-                # 2. 게임 영역(배치) 클릭
+                # 3. 게임 영역(배치) 클릭
                 elif game_area_rect.collidepoint(mouse_pos):
                     if is_placeable:
                         placed_furniture.append({
@@ -559,12 +590,15 @@ while running:
                             "grid_pos": (mouse_grid_x, mouse_grid_y),
                             "rotation": selected_furniture_rotation
                         })
-                # 3. 오른쪽 UI 버튼 클릭
+                # 4. 오른쪽 UI 버튼 클릭
                 elif right_ui_rect.collidepoint(mouse_pos):
                     # 디자인 완료
                     if evaluate_button_rect and evaluate_button_rect.collidepoint(mouse_pos):
-                        if not evaluation_result: # 평가가 아직 안됐을 때만
-                            evaluation_result = trigger_evaluation()
+                        # 스레드 시작 조건
+                        if not evaluation_result and not is_evaluating:
+                            is_evaluating = True
+                            eval_thread = threading.Thread(target=run_evaluation_thread, daemon=True)
+                            eval_thread.start()
                     # 초기화
                     if reset_button_rect and reset_button_rect.collidepoint(mouse_pos):
                         reset_game()
@@ -615,13 +649,14 @@ while running:
 
     # --- 2. Z-Sorting 및 가구 그리기 (게임 영역) ---
     render_list = placed_furniture.copy()
-    if game_area_rect.collidepoint(mouse_pos): # 게임 영역 안에서만
-        render_list.append({
-            "item": current_item,
-            "grid_pos": (mouse_grid_x, mouse_grid_y),
-            "rotation": selected_furniture_rotation,
-            "is_ghost": True 
-        })
+    if not is_evaluating and not show_feedback_popup:
+        if game_area_rect.collidepoint(mouse_pos): # 게임 영역 안에서만
+            render_list.append({
+                "item": current_item,
+                "grid_pos": (mouse_grid_x, mouse_grid_y),
+                "rotation": selected_furniture_rotation,
+                "is_ghost": True 
+            })
         
     sorted_render_list = sorted(render_list, key=lambda f: (f['grid_pos'][1], f['grid_pos'][0]))
 
@@ -629,10 +664,11 @@ while running:
         item = furniture["item"]
         pos_x, pos_y = furniture["grid_pos"]
         rotation = furniture["rotation"]
-        
+
         image_to_draw = get_rotated_image(item, rotation)
         
         if furniture.get("is_ghost", False):
+            # 고스트 이미지 그리기 (루프 상단의 is_placeable 사용)
             tint_color = (0, 255, 0, 100) if is_placeable else (255, 0, 0, 100)
             ghost_image = image_to_draw.copy()
             tint_surface = pygame.Surface(ghost_image.get_size(), pygame.SRCALPHA)
@@ -640,8 +676,9 @@ while running:
             ghost_image.blit(tint_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
             screen.blit(ghost_image, (pos_x * GRID_SIZE, pos_y * GRID_SIZE))
         else:
+            # 실제 배치된 가구 그리기
             screen.blit(image_to_draw, (pos_x * GRID_SIZE, pos_y * GRID_SIZE))
-
+            
     # --- 3. 오른쪽 UI 그리기 ---
     # 3.1 도움말 패널
     ui_y_offset = 10 # 오른쪽 패널 상단 기준
@@ -707,49 +744,18 @@ while running:
     # 3.3 '디자인 완료' 버튼 또는 '평가 결과' 표시
     ui_y_offset += 20 # 의뢰서와 버튼/결과 사이 여백
     
-    if evaluation_result:
-        # --- 평가가 완료된 경우 ---
-# (수정) 별점 표시
-        if star_full_img and star_half_img and star_empty_img:
-            draw_star_rating(
-                screen, 
-                evaluation_result['score'], 
-                (GAME_AREA_WIDTH + 10, ui_y_offset),
-                star_full_img, star_half_img, star_empty_img
-            )
-        else:
-            # (Fallback) 별 로드 실패 시
-            score_str = f"Score: {evaluation_result['score']:.1f} / 5.0"
-            screen.blit(font_L.render(score_str, True, (0, 100, 0)), (GAME_AREA_WIDTH + 10, ui_y_offset))
-
-        feedback_y = ui_y_offset + 40
-        screen.blit(font_L.render("고객 피드백:", True, (0,0,0)), (GAME_AREA_WIDTH + 10, feedback_y))
-        
-        # (수정) 피드백 (종이 + 손글씨)
-        if paper_img:
-            paper_rect_feedback = paper_img.get_rect(topleft=(GAME_AREA_WIDTH + 10, feedback_y + 30))
-            screen.blit(paper_img, paper_rect_feedback)
-            draw_text_multiline(
-                screen,
-                evaluation_result['feedback'],
-                (paper_rect_feedback.x + 25, paper_rect_feedback.y + 25), # 패딩
-                font_Pencil_M, # (신규) 손글씨 폰트
-                paper_rect_feedback.width - 50, # 패딩
-                (40, 40, 40) # 손글씨 색
-            )
-        else:
-            # (Fallback) 종이 로드 실패 시
-            draw_text_multiline(
-                screen, evaluation_result['feedback'], (GAME_AREA_WIDTH + 10, feedback_y + 30),
-                font_M, RIGHT_UI_MARGIN - 20, (50,50,50)
-            )
-    else:
-        # 평가 전, '디자인 완료' 버튼 표시
+    # (수정) 평가가 아직 수행되지 않았을 때만 '디자인 완료' 버튼 표시
+    if not evaluation_result:
         evaluate_button_rect = pygame.Rect(GAME_AREA_WIDTH + 10, ui_y_offset, RIGHT_UI_MARGIN - 20, 50)
         
         # 마우스 호버 효과
         mouse_over_button = evaluate_button_rect.collidepoint(mouse_pos)
-        button_color = (0, 180, 0) if mouse_over_button else (0, 150, 0) # 호버 시 밝게
+        
+        # (수정) 평가 중일 때는 버튼을 비활성화된 것처럼 회색으로 표시
+        if is_evaluating:
+            button_color = (100, 100, 100) # 비활성 회색
+        else:
+            button_color = (0, 180, 0) if mouse_over_button else (0, 150, 0) # 호버 시 밝게
             
         pygame.draw.rect(screen, button_color, evaluate_button_rect, border_radius=5)
         
@@ -800,6 +806,74 @@ while running:
             name_x_pos = item_x_pos + 70 # 10(여백) + 50(썸네일) + 10(여백)
             bottom_panel.blit(font_M.render(item['name'], True, (0,0,0)), (name_x_pos + 20, item_y_pos + 20)) # (y + 20 상하중앙정렬)
 
+    # --- 5. 오버레이 그리기 (로딩 / 피드백 팝업) ---
+    if is_evaluating or show_feedback_popup:
+        # 1. 화면 어둡게 하기 (Dimming)
+        dim_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        dim_surface.fill((0, 0, 0, 180)) # 180/255 투명도
+        screen.blit(dim_surface, (0, 0))
+
+    if is_evaluating:
+        # 2. 로딩 텍스트
+        center_x, center_y = SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2
+        
+        # 로딩 텍스트
+        loading_text = font_L.render("피드백 생성 중...", True, (255, 255, 255))
+        loading_rect = loading_text.get_rect(center=(center_x, center_y))
+        screen.blit(loading_text, loading_rect)
+    elif show_feedback_popup:
+        # 3. (수정) 피드백 팝업 (모서리가 둥근 사각형)
+        if evaluation_result:
+            # 3.1 팝업 배경 (모서리가 둥근 사각형)
+            popup_width = max(400, SCREEN_WIDTH // 2)
+            popup_height = max(500, SCREEN_HEIGHT - 100)
+            popup_rect = pygame.Rect(0, 0, popup_width, popup_height)
+            popup_rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+            
+            # (신규) paper.png 대신 사각형 그리기
+            popup_bg_color = (250, 248, 240) # 포스트잇과 유사한 아이보리색
+            popup_border_radius = 15
+            pygame.draw.rect(screen, popup_bg_color, popup_rect, border_radius=popup_border_radius)
+            
+            # 팝업 내부 좌표 (패딩 40px)
+            inner_x = popup_rect.x + 40
+            inner_y = popup_rect.y + 40
+            inner_width = popup_rect.width - 80
+
+            # 3.2 타이틀
+            title_text = font_L.render("고객 피드백", True, (0, 0, 0))
+            screen.blit(title_text, (inner_x, inner_y))
+            
+            # 3.3 별점
+            if star_full_img and star_half_img and star_empty_img:
+                draw_star_rating(
+                    screen, 
+                    evaluation_result['score'], 
+                    (inner_x, inner_y + 50),
+                    star_full_img, star_half_img, star_empty_img
+                )
+            else: # Fallback
+                score_str = f"Score: {evaluation_result['score']:.1f} / 5.0"
+                screen.blit(font_L.render(score_str, True, (0, 100, 0)), (inner_x, inner_y + 50))
+
+            # 3.4 피드백 본문 (손글씨)
+            draw_text_multiline(
+                screen,
+                evaluation_result['feedback'],
+                (inner_x, inner_y + 100), # 별점 아래
+                font_Pencil_M, 
+                inner_width, 
+                (40, 40, 40) 
+            )
+
+            # 3.5 닫기 버튼
+            popup_close_button_rect = pygame.Rect(popup_rect.centerx - 50, popup_rect.bottom - 70, 100, 40)
+            mouse_over_close = popup_close_button_rect.collidepoint(mouse_pos)
+            close_btn_color = (180, 0, 0) if mouse_over_close else (150, 0, 0)
+            
+            pygame.draw.rect(screen, close_btn_color, popup_close_button_rect, border_radius=5)
+            close_text = font_M.render("닫기", True, (255, 255, 255))
+            screen.blit(close_text, close_text.get_rect(center=popup_close_button_rect.center))
     # --- 업데이트 ---
     pygame.display.flip()
 

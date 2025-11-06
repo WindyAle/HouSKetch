@@ -94,10 +94,10 @@ class ModelManager:
                 {'role': 'assistant', 'content': "아늑하고 소파와 테이블이 있는 작은 거실이 좋아요."}
             ]
             options = {
-                "temperature": 1.0,
+                "temperature": 0.7,
                 "num_ctx": 2048,
-                "top_p": 1
-                # "num_predict": 20
+                "top_p": 1,
+                "num_predict": 100
             }
 
             response = self.client.chat(

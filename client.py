@@ -55,7 +55,7 @@ def generate_request(model_manager: ModelManager) -> str:
     try:
         raw_response = model_manager.get_chat_response(system_prompt, user_prompt)
         
-        # (신규) LLM 응답 파싱
+        # LLM 응답 파싱
         wishlist_match = re.search(r"\[WISHLIST\]\n(.*?)\n\[REQUEST\]", raw_response, re.DOTALL)
         request_match = re.search(r"\[REQUEST\]\n(.*?)$", raw_response, re.DOTALL)
         
@@ -105,7 +105,7 @@ def generate_feedback(model_manager: ModelManager, persona: dict, request: str, 
     
     user_prompt = (
         f"나의 원래 요구사항: \"{request}\"\n"
-        f"(내가 마음 속으로 원했던 것: {wishlist_str})\n" # <-- (신규) LLM에게 비밀 정보 제공
+        f"(내가 마음 속으로 원했던 것: {wishlist_str})\n" # <-- LLM에게 비밀 정보 제공
         f"디자이너의 결과물: \"{design_description}\"\n"
         f"내 평점: {score:.1f} / 5.0\n\n"
         "이것을 참고하여 고객으로서 디자이너에게 피드백을 작성하세요. (만약 내 비밀 요구사항이 충족되지 않았다면 그 점을 불만스럽게 지적하세요.)"
