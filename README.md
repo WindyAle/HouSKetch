@@ -1,4 +1,5 @@
 # Well... come to my Home 😒
+<img width="656" height="480" alt="background" src="https://github.com/user-attachments/assets/b6b36ecd-4c13-4eb5-8232-ea9766903ff7" />
 
 LLM 기반 인테리어 배치 게임
 
